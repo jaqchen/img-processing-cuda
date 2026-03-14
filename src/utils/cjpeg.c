@@ -34,9 +34,6 @@
 #define _CRT_SECURE_NO_DEPRECATE
 #endif
 
-#ifdef CJPEG_FUZZER
-#define JPEG_INTERNALS
-#endif
 #include "cdjpeg.h"             /* Common decls for cjpeg/djpeg applications */
 #include "jversion.h"           /* for version message */
 #include "jconfigint.h"
@@ -151,44 +148,6 @@ static char *outfilename;       /* for -outfile switch */
 static boolean memdst;          /* for -memdst switch */
 static boolean report;          /* for -report switch */
 static boolean strict;          /* for -strict switch */
-
-
-#ifdef CJPEG_FUZZER
-
-#include <setjmp.h>
-
-struct fuzzer_error_mgr {
-  struct jpeg_error_mgr pub;
-  jmp_buf setjmp_buffer;
-};
-
-static void fuzzer_error_exit(j_common_ptr cinfo)
-{
-  struct fuzzer_error_mgr *myerr = (struct fuzzer_error_mgr *)cinfo->err;
-
-  longjmp(myerr->setjmp_buffer, 1);
-}
-
-static void fuzzer_emit_message(j_common_ptr cinfo, int msg_level)
-{
-  if (msg_level < 0)
-    cinfo->err->num_warnings++;
-}
-
-#define HANDLE_ERROR() { \
-  if (cinfo.global_state > CSTATE_START) { \
-    if (memdst && outbuffer) \
-      (*cinfo.dest->term_destination) (&cinfo); \
-    jpeg_abort_compress(&cinfo); \
-  } \
-  jpeg_destroy_compress(&cinfo); \
-  if (memdst) \
-    free(outbuffer); \
-  free(icc_profile); \
-  return EXIT_FAILURE; \
-}
-
-#endif
 
 
 LOCAL(void)
@@ -614,27 +573,14 @@ my_emit_message(j_common_ptr cinfo, int msg_level)
  * The main program.
  */
 
-#ifdef CJPEG_FUZZER
-static int
-cjpeg_fuzzer(int argc, char **argv, FILE *input_file)
-#else
-int
-main(int argc, char **argv)
-#endif
+int main(int argc, char **argv)
 {
   struct jpeg_compress_struct cinfo;
-#ifdef CJPEG_FUZZER
-  struct fuzzer_error_mgr myerr;
-  struct jpeg_error_mgr &jerr = myerr.pub;
-#else
   struct jpeg_error_mgr jerr;
-#endif
   struct cdjpeg_progress_mgr progress;
   int file_index;
   cjpeg_source_ptr src_mgr;
-#ifndef CJPEG_FUZZER
   FILE *input_file = NULL;
-#endif
   FILE *icc_file;
   JOCTET *icc_profile = NULL;
   long icc_len = 0;
@@ -701,7 +647,6 @@ main(int argc, char **argv)
   }
 #endif /* TWO_FILE_COMMANDLINE */
 
-#ifndef CJPEG_FUZZER
   /* Open the input file. */
   if (file_index < argc) {
     if ((input_file = fopen(argv[file_index], READ_BINARY)) == NULL) {
@@ -712,7 +657,6 @@ main(int argc, char **argv)
     /* default input file is stdin */
     input_file = read_stdin();
   }
-#endif
 
   /* Open the output file. */
   if (outfilename != NULL) {
@@ -752,13 +696,6 @@ main(int argc, char **argv)
     fclose(icc_file);
   }
 
-#ifdef CJPEG_FUZZER
-  jerr.error_exit = fuzzer_error_exit;
-  jerr.emit_message = fuzzer_emit_message;
-  if (setjmp(myerr.setjmp_buffer))
-    HANDLE_ERROR()
-#endif
-
   if (report) {
     start_progress_monitor((j_common_ptr)&cinfo, &progress);
     progress.report = report;
@@ -767,9 +704,6 @@ main(int argc, char **argv)
   /* Figure out the input file format, and set up to read it. */
   src_mgr = select_file_type(&cinfo, input_file);
   src_mgr->input_file = input_file;
-#ifdef CJPEG_FUZZER
-  src_mgr->max_pixels = 1048576;
-#endif
 
   /* Read the input file header to obtain file size & colorspace. */
   (*src_mgr->start_input) (&cinfo, src_mgr);
@@ -785,11 +719,6 @@ main(int argc, char **argv)
     jpeg_mem_dest(&cinfo, &outbuffer, &outsize);
   else
     jpeg_stdio_dest(&cinfo, output_file);
-
-#ifdef CJPEG_FUZZER
-  if (setjmp(myerr.setjmp_buffer))
-    HANDLE_ERROR()
-#endif
 
   /* Start compressor */
   jpeg_start_compress(&cinfo, TRUE);
@@ -825,10 +754,8 @@ main(int argc, char **argv)
   jpeg_destroy_compress(&cinfo);
 
   /* Close files, if we opened them */
-#ifndef CJPEG_FUZZER
   if (input_file != stdin)
     fclose(input_file);
-#endif
   if (output_file != stdout && output_file != NULL)
     fclose(output_file);
 
@@ -836,9 +763,7 @@ main(int argc, char **argv)
     end_progress_monitor((j_common_ptr)&cinfo);
 
   if (memdst) {
-#ifndef CJPEG_FUZZER
     fprintf(stderr, "Compressed size:  %lu bytes\n", outsize);
-#endif
     free(outbuffer);
   }
 

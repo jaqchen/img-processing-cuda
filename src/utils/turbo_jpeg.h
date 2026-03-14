@@ -30,7 +30,7 @@ struct turbo_jpeg * turbo_jpeg_new(int width, int height, isgray);
 
 struct turbo_jpeg * turbo_jpeg_load(const char * filename);
 
-int turbo_jpeg_save(struct turbo_jpeg * tj, const char * filename);
+int turbo_jpeg_save(struct turbo_jpeg * tj, const char * filename, int quality);
 
 #ifdef __cplusplus
 }
