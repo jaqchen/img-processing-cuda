@@ -1,0 +1,9 @@
+*.jpg
+*.png
+*.tif
+*.tiff
+.*.swp
+*.cmake
+Makefile
+CMakeFiles
+CMakeCache.txt
