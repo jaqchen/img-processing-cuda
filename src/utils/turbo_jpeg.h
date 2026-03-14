@@ -12,25 +12,35 @@
 extern "C" {
 #endif
 
+struct turbo_rgb {
+	unsigned char r;
+	unsigned char g;
+	unsigned char b;
+} __attribute__((__packed__));
+
 /*
  * image width or height should not be smaller than `TURBO_JPEG_MIN
  * image width or height should not be largar than `TURBO_JPEG_MAX
  */
 #define TURBO_JPEG_MIN   12
-#define TURBO_JPEG_MAX   65535
+#define TURBO_JPEG_MAX   16384
 
 struct turbo_jpeg {
-	unsigned char * tj_pixels; /* dynamically allocated memory holding the pixels data */
+	unsigned char ** tj_rows; /* point to each row of pixels raw data */
+	unsigned char * tj_buffer; /* actual buffer for the underlying data */
 	int tj_width; /* width of the image in pixels */
 	int tj_height; /* height of the image in pixels */
 	int tj_isgray; /* non-zero: grayscale image; zero: RGB image */
 };
 
-struct turbo_jpeg * turbo_jpeg_new(int width, int height, isgray);
+struct turbo_jpeg * turbo_jpeg_new(int width, int height, int isgray);
+
+void turbo_jpeg_free(struct turbo_jpeg * tj);
 
 struct turbo_jpeg * turbo_jpeg_load(const char * filename);
 
-int turbo_jpeg_save(struct turbo_jpeg * tj, const char * filename, int quality);
+int turbo_jpeg_save(struct turbo_jpeg * tj,
+	const char * filename, int quality, int progressive);
 
 #ifdef __cplusplus
 }
