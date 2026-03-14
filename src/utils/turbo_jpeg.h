@@ -25,22 +25,29 @@ struct turbo_rgb {
 #define TURBO_JPEG_MIN   12
 #define TURBO_JPEG_MAX   16384
 
+/* supported colorspaces */
+#define TURBO_JPEG_GRAY  1
+#define TURBO_JPEG_RGB   2
+#define TURBO_JPEG_YUV   3
+
 struct turbo_jpeg {
 	unsigned char ** tj_rows; /* point to each row of pixels raw data */
 	unsigned char * tj_buffer; /* actual buffer for the underlying data */
 	int tj_width; /* width of the image in pixels */
 	int tj_height; /* height of the image in pixels */
-	int tj_isgray; /* non-zero: grayscale image; zero: RGB image */
+	int tj_color; /* non-zero: grayscale image; zero: RGB image */
 };
 
-struct turbo_jpeg * turbo_jpeg_new(int width, int height, int isgray);
+struct turbo_jpeg * turbo_jpeg_new(int width, int height, int colorspace);
 
 void turbo_jpeg_free(struct turbo_jpeg * tj);
 
-struct turbo_jpeg * turbo_jpeg_load(const char * filename);
+struct turbo_jpeg * turbo_jpeg_load(const char * filename, int forcegray);
 
 int turbo_jpeg_save(struct turbo_jpeg * tj,
 	const char * filename, int quality, int progressive);
+
+int turbo_jpeg_checkcolor(int colorspace);
 
 #ifdef __cplusplus
 }

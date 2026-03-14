@@ -36,10 +36,10 @@
 #include <jpeglib.h>
 #include "turbo_jpeg.h"
 
-struct turbo_jpeg * turbo_jpeg_new(int width, int height, int isgray)
+struct turbo_jpeg * turbo_jpeg_new(int width, int height, int colorspace)
 {
   size_t tsize;
-  int row_size, i;
+  int row_size, i, color;
   struct turbo_jpeg * jpeg;
   unsigned char * imgbuf, * jptr;
 
@@ -52,7 +52,11 @@ struct turbo_jpeg * turbo_jpeg_new(int width, int height, int isgray)
     return NULL;
   }
 
-  if (isgray != 0)
+  color = turbo_jpeg_checkcolor(colorspace);
+  if (color == JCS_UNKNOWN)
+    return NULL;
+
+  if (colorspace == TURBO_JPEG_GRAY)
     row_size = width; /* grayscale image */
   else
     row_size = width * 3; /* RGB image */
@@ -65,7 +69,7 @@ struct turbo_jpeg * turbo_jpeg_new(int width, int height, int isgray)
   imgbuf = (unsigned char *) calloc((size_t) height, (size_t) row_size);
   if (imgbuf == NULL) {
     fprintf(stderr, "Error, failed to allocate memory for %s image: %dx%d\n",
-      isgray ? "grayscale" : "RGB color", width, height);
+      color == TURBO_JPEG_GRAY ? "gray" : "color", width, height);
     fflush(stderr);
     return NULL;
   }
@@ -88,7 +92,7 @@ struct turbo_jpeg * turbo_jpeg_new(int width, int height, int isgray)
   jpeg->tj_buffer  = imgbuf;
   jpeg->tj_width   = width;
   jpeg->tj_height  = height;
-  jpeg->tj_isgray  = isgray;
+  jpeg->tj_color   = colorspace;
   for (i = 0; i < height; ++i)
     jpeg->tj_rows[i] = &imgbuf[i * row_size];
   return jpeg;
@@ -105,7 +109,7 @@ void turbo_jpeg_free(struct turbo_jpeg * tj)
     tj->tj_buffer = NULL;
   }
   tj->tj_width = tj->tj_height = 0;
-  tj->tj_isgray = 0;
+  tj->tj_color = 0;
   free(tj);
 }
 
@@ -122,6 +126,7 @@ static void my_emit_message(j_common_ptr cinfo, int msg_level)
 int turbo_jpeg_save(struct turbo_jpeg * tj,
 	const char * filename, int quality, int progressive)
 {
+  int color;
   struct jpeg_compress_struct cinfo;
   struct jpeg_error_mgr jerr;
   FILE *output_file = NULL;
@@ -151,6 +156,10 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
     return -1;
   }
 
+  color = turbo_jpeg_checkcolor(tj->tj_color);
+  if (color == JCS_UNKNOWN)
+    return -1;
+
   output_file = fopen(filename, "wbe");
   if (output_file == NULL) {
     fprintf(stderr, "Error, jpeg_save can't create file %s\n", filename);
@@ -173,7 +182,7 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
    * but we need to provide some value for jpeg_set_defaults() to work.
    */
   cinfo.data_precision = 8;
-  cinfo.in_color_space = JCS_RGB; /* arbitrary guess */
+  cinfo.in_color_space = color; /* arbitrary guess */
   cinfo.image_width = (JDIMENSION) tj->tj_width;
   cinfo.image_height = (JDIMENSION) tj->tj_height;
   jpeg_set_defaults(&cinfo);
@@ -184,8 +193,8 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
    * the input file.
    */
   cinfo.dct_method = JDCT_ISLOW;
-  cinfo.input_components = tj->tj_isgray ? 1 : 3;
-  jpeg_set_colorspace(&cinfo, tj->tj_isgray ? JCS_GRAYSCALE : JCS_RGB);
+  cinfo.input_components = (tj->tj_color == TURBO_JPEG_GRAY) ? 1 : 3;
+  jpeg_set_colorspace(&cinfo, color);
   jpeg_set_quality(&cinfo, quality, 0);
 
   jerr.emit_message = my_emit_message;

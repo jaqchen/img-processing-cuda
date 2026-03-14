@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
   struct turbo_jpeg * jpeg;
 
   w = h = 512;
-  jpeg = turbo_jpeg_new(w, h, 0);
+  jpeg = turbo_jpeg_new(w, h, TURBO_JPEG_RGB);
   if (jpeg == NULL)
     return -1;
 

@@ -3,12 +3,15 @@ MAKEFLAGS   += -r -R
 CC          := gcc
 CFLAGS      := -I. -Wall -fPIC -O2 -ggdb -fno-omit-frame-pointer
 LDFLAGS     := -ljpeg
-TARGETS     := test-jpeg
+TARGETS     := test-jpeg test-encode
 
 .PHONY: all clean
 all: $(TARGETS)
 
-test-jpeg: test-jpeg.c cjpeg.c
+test-encode: test-encode.c cjpeg.c djpeg.c
+	$(CC) -o $@ $(CFLAGS) $^ $(LDFLAGS)
+
+test-jpeg: test-jpeg.c cjpeg.c djpeg.c
 	$(CC) -o $@ $(CFLAGS) $^ $(LDFLAGS)
 
 clean:
