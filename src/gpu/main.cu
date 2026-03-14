@@ -5,6 +5,9 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/types_c.h"
+#include "opencv2/highgui/highgui_c.h"
+#include "opencv2/imgcodecs/legacy/constants_c.h"
 #include "kernelcall.cuh"
 
 #define TILE_WIDTH 16

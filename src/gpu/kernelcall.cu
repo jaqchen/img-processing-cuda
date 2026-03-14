@@ -203,7 +203,6 @@ void kernel_nlm_host(Rgb* device_img, Rgb* img, int width, int height, int conv_
 }
 
 // Implementation of the Canny Edge detection algorithm
-void kernel_nlm_host(Rgb* device_img, Rgb* img, int width, int height, int conv_size, int block_radius, double h_param)
 void kernel_edge_detect(Rgb* device_img, double* img, int width, int height, int conv_size, double otsu_threshold)
 {
     // Creation of the gpu unit grid

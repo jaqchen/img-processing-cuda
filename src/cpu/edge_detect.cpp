@@ -1,5 +1,6 @@
 #include <math.h>
 #include "edge_detect.hh"
+#include "opencv2/imgproc/types_c.h"
 
 // Applies a convolution at a given location x, y.
 // where conv_size is the size of the convolution mask
