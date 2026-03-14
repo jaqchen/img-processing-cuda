@@ -61,9 +61,6 @@ int main(int argc, char** argv)
         res = knn_grey(image, 2, 150.0);
         res = conv_with_mask(res, 1);
     }
-    namedWindow("Display Window", CV_WINDOW_AUTOSIZE);
-    imshow("Display Window", res);
-    waitKey(0);
     imwrite("output.jpg", res);
     return 0;
 }
