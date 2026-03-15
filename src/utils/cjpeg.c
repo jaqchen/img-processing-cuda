@@ -47,7 +47,7 @@ struct turbo_jpeg * turbo_jpeg_new(unsigned int width, unsigned int height, int 
   jpeg = NULL;
   if (width < TURBO_JPEG_MIN || width > TURBO_JPEG_MAX ||
     height < TURBO_JPEG_MIN || height > TURBO_JPEG_MAX) {
-    fprintf(stderr, "Error, invalid image size for jpeg_new: %dx%d\n",
+    fprintf(stderr, "Error, invalid image size for jpeg_new: %ux%u\n",
       width, height);
     fflush(stderr);
     return NULL;
@@ -69,7 +69,7 @@ struct turbo_jpeg * turbo_jpeg_new(unsigned int width, unsigned int height, int 
 
   imgbuf = (unsigned char *) calloc((size_t) height, (size_t) row_size);
   if (imgbuf == NULL) {
-    fprintf(stderr, "Error, failed to allocate memory for %s image: %dx%d\n",
+    fprintf(stderr, "Error, failed to allocate memory for %s image: %ux%u\n",
       color == TURBO_JPEG_GRAY ? "gray" : "color", width, height);
     fflush(stderr);
     return NULL;
@@ -148,7 +148,7 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
 
   if (tj->tj_width < TURBO_JPEG_MIN || tj->tj_width > TURBO_JPEG_MAX ||
     tj->tj_height < TURBO_JPEG_MIN || tj->tj_height > TURBO_JPEG_MAX) {
-    fprintf(stderr, "Error, invalid image size: %dx%d\n", tj->tj_width, tj->tj_height);
+    fprintf(stderr, "Error, invalid image size: %ux%u\n", tj->tj_width, tj->tj_height);
     fflush(stderr);
     return -1;
   }

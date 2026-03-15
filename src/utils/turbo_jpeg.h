@@ -49,7 +49,7 @@ struct turbo_jpeg {
 	unsigned int tj_height; /* height of the image in pixels */
 	unsigned int tj_rowsize; /* length in bytes of one row of pixels */
 	unsigned int tj_bufsize; /* total memory in bytes allocated to `tf_buffer */
-	int tj_color; /* non-zero: grayscale image; zero: RGB image */
+	int tj_color; /* one of `TURBO_JPEG_GRAY/TURBO_JPEG_RGB/TURBO_JPEG_YUV` */
 };
 
 struct turbo_jpeg * turbo_jpeg_new(unsigned int width, unsigned int height, int colorspace);

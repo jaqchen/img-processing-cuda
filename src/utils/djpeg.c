@@ -217,7 +217,7 @@ err0:
 
   if (cinfo.image_width < TURBO_JPEG_MIN || cinfo.image_width > TURBO_JPEG_MAX ||
     cinfo.image_height < TURBO_JPEG_MIN || cinfo.image_height > TURBO_JPEG_MAX) {
-    fprintf(stderr, "Error, invalid image size for %s: %dx%d\n",
+    fprintf(stderr, "Error, invalid image size for %s: %ux%u\n",
       filename, cinfo.image_width, cinfo.image_height);
     fflush(stderr);
     goto err0;
@@ -225,7 +225,7 @@ err0:
 
   tj = turbo_jpeg_new(cinfo.image_width, cinfo.image_height, colorspace);
   if (tj == NULL) {
-    fprintf(stderr, "Error, failed to create INMEMORY jpeg handle, size: %dx%d\n",
+    fprintf(stderr, "Error, failed to create INMEMORY jpeg handle, size: %ux%u\n",
       cinfo.image_width, cinfo.image_height);
     fflush(stderr);
     goto err0;
