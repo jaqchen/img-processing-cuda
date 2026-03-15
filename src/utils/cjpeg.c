@@ -36,10 +36,11 @@
 #include <jpeglib.h>
 #include "turbo_jpeg.h"
 
-struct turbo_jpeg * turbo_jpeg_new(int width, int height, int colorspace)
+struct turbo_jpeg * turbo_jpeg_new(unsigned int width, unsigned int height, int colorspace)
 {
+  int color;
   size_t tsize;
-  int row_size, i, color;
+  unsigned int row_size, i;
   struct turbo_jpeg * jpeg;
   unsigned char * imgbuf, * jptr;
 
@@ -53,7 +54,7 @@ struct turbo_jpeg * turbo_jpeg_new(int width, int height, int colorspace)
   }
 
   color = turbo_jpeg_checkcolor(colorspace);
-  if (color == JCS_UNKNOWN)
+  if (color < 0)
     return NULL;
 
   if (colorspace == TURBO_JPEG_GRAY)
@@ -92,6 +93,8 @@ struct turbo_jpeg * turbo_jpeg_new(int width, int height, int colorspace)
   jpeg->tj_buffer  = imgbuf;
   jpeg->tj_width   = width;
   jpeg->tj_height  = height;
+  jpeg->tj_rowsize = row_size;
+  jpeg->tj_bufsize = row_size * height;
   jpeg->tj_color   = colorspace;
   for (i = 0; i < height; ++i)
     jpeg->tj_rows[i] = &imgbuf[i * row_size];
@@ -109,7 +112,9 @@ void turbo_jpeg_free(struct turbo_jpeg * tj)
     tj->tj_buffer = NULL;
   }
   tj->tj_width = tj->tj_height = 0;
-  tj->tj_color = 0;
+  tj->tj_rowsize = 0;
+  tj->tj_bufsize = 0;
+  tj->tj_color = -1;
   free(tj);
 }
 
@@ -137,6 +142,10 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
     return -1;
   }
 
+  color = turbo_jpeg_checkcolor(tj->tj_color);
+  if (color < 0)
+    return -1;
+
   if (tj->tj_width < TURBO_JPEG_MIN || tj->tj_width > TURBO_JPEG_MAX ||
     tj->tj_height < TURBO_JPEG_MIN || tj->tj_height > TURBO_JPEG_MAX) {
     fprintf(stderr, "Error, invalid image size: %dx%d\n", tj->tj_width, tj->tj_height);
@@ -155,10 +164,6 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
     fflush(stderr);
     return -1;
   }
-
-  color = turbo_jpeg_checkcolor(tj->tj_color);
-  if (color == JCS_UNKNOWN)
-    return -1;
 
   output_file = fopen(filename, "wbe");
   if (output_file == NULL) {
@@ -182,9 +187,9 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
    * but we need to provide some value for jpeg_set_defaults() to work.
    */
   cinfo.data_precision = 8;
-  cinfo.in_color_space = color; /* arbitrary guess */
-  cinfo.image_width = (JDIMENSION) tj->tj_width;
-  cinfo.image_height = (JDIMENSION) tj->tj_height;
+  cinfo.in_color_space = color;
+  cinfo.image_width = tj->tj_width;
+  cinfo.image_height = tj->tj_height;
   jpeg_set_defaults(&cinfo);
 
   /* Scan command line to find file names.
@@ -213,14 +218,23 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
 
   /* Process data */
   while (cinfo.next_scanline < cinfo.image_height) {
-    JSAMPROW row_pointer[1];
-    row_pointer[0] = tj->tj_rows[cinfo.next_scanline];
-    jpeg_write_scanlines(&cinfo, row_pointer, 1);
+    JSAMPROW rowp[8];
+    unsigned int i, j, k;
+
+    j = 0;
+    k = cinfo.next_scanline;
+    for (i = 0; i < 8; ++i) {
+      rowp[j++] = tj->tj_rows[k + i];
+      if ((k + j) >= cinfo.image_height)
+        break;
+    }
+    jpeg_write_scanlines(&cinfo, rowp, j);
   }
 
   /* Finish compression and release memory */
   jpeg_finish_compress(&cinfo);
   jpeg_destroy_compress(&cinfo);
+  fflush(output_file);
   fclose(output_file);
 
   /* All done. */

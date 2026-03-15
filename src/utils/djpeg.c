@@ -128,18 +128,35 @@ int turbo_jpeg_checkcolor(int colorspace)
     return JCS_YCbCr;
   fprintf(stderr, "Error, unsupported colorspace specified: %d\n", colorspace);
   fflush(stderr);
-  return JCS_UNKNOWN;
+  return -1;
 }
 
-struct turbo_jpeg * turbo_jpeg_load(const char * filename, int forcegray)
+struct turbo_jpeg * turbo_jpeg_load(const char * filename, int colorspace)
 {
-  int colorspace;
+  int color;
   struct jpeg_decompress_struct cinfo;
   struct jpeg_error_mgr jerr;
   FILE * input_file = NULL;
   struct turbo_jpeg * tj = NULL;
 
-  colorspace = 0;
+  if (filename == NULL || filename[0] == '\0') {
+    fputs("Error, invalid file-name for jpeg_load.\n", stderr);
+    fflush(stderr);
+    return NULL;
+  }
+
+  color = turbo_jpeg_checkcolor(colorspace);
+  if (color < 0)
+    return NULL;
+
+  /* Open the input file. */
+  input_file = fopen(filename, "rbe");
+  if (input_file == NULL) {
+    fprintf(stderr, "Error, failed to open JPEG file %s\n", filename);
+    fflush(stderr);
+    return NULL;
+  }
+
   memset(&jerr, 0, sizeof(jerr));
   memset(&cinfo, 0, sizeof(cinfo));
 
@@ -164,14 +181,6 @@ struct turbo_jpeg * turbo_jpeg_load(const char * filename, int forcegray)
    * found during jpeg_read_header...)
    */
 
-  /* Open the input file. */
-  input_file = fopen(filename, "rbe");
-  if (input_file == NULL) {
-    fprintf(stderr, "Error, failed to open JPEG file %s\n", filename);
-    fflush(stderr);
-    return NULL;
-  }
-
   /* Specify data source for decompression */
   jpeg_stdio_src(&cinfo, input_file);
 
@@ -191,16 +200,13 @@ err0:
     goto err0;
   }
 
-  if (forcegray != 0 || cinfo.jpeg_color_space == JCS_GRAYSCALE) {
-    colorspace = TURBO_JPEG_GRAY;
-    cinfo.out_color_space = JCS_GRAYSCALE;
-  } else if (cinfo.jpeg_color_space == JCS_YCbCr || cinfo.jpeg_color_space == JCS_CMYK || cinfo.jpeg_color_space == JCS_YCCK) {
-    colorspace = TURBO_JPEG_YUV;
-    cinfo.out_color_space = JCS_YCbCr;
-  } else {
-    colorspace = TURBO_JPEG_RGB;
-    cinfo.out_color_space = JCS_RGB;
+  if (cinfo.jpeg_color_space == JCS_GRAYSCALE && colorspace != TURBO_JPEG_GRAY) {
+    fprintf(stderr, "Error, cannot convert grayscale image to color image: %s\n", filename);
+    fflush(stderr);
+    goto err0;
   }
+
+  cinfo.out_color_space = color;
   jerr.emit_message = my_emit_message;
 
   if (cinfo.data_precision != 8) {
@@ -236,8 +242,17 @@ err0:
 
   /* Process data */
   while (cinfo.output_scanline < cinfo.output_height) {
-    jpeg_read_scanlines(&cinfo, &tj->tj_rows[cinfo.output_scanline],
-      cinfo.output_height - cinfo.output_scanline);
+    JSAMPROW rowp[8];
+    unsigned int i, j, k;
+
+    j = 0;
+    k = cinfo.output_scanline;
+    for (i = 0; i < 8; ++i) {
+      rowp[j++] = tj->tj_rows[k + i];
+      if ((k + j) >= cinfo.image_height)
+        break;
+    }
+    jpeg_read_scanlines(&cinfo, rowp, j);
   }
 
   /* Hack: count final pass as done in case finish_output does an extra pass.
@@ -249,7 +264,6 @@ err0:
    */
   jpeg_finish_decompress(&cinfo);
   jpeg_destroy_decompress(&cinfo);
-  /* Close files, if we opened them */
   fclose(input_file);
 
   /* All done. */

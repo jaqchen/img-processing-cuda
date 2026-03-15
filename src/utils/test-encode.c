@@ -1,7 +1,7 @@
 /*
  * Created by yejq.jiaqiang@gmail.com
  *
- * Simple turbo JPEG test
+ * Simple turbo JPEG encoding test
  *
  * Licence: GPLv2
  */
@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  jpeg = turbo_jpeg_load(img, 0);
+  jpeg = turbo_jpeg_load(img, TURBO_JPEG_YUV);
   if (jpeg == NULL)
     return 2;
 
