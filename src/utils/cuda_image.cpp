@@ -29,40 +29,57 @@ struct cuda_image * turbo_image_to_cuda(const struct turbo_jpeg * tj)
   return ci;
 }
 
-__global__ void cuda_image_setup(struct cuda_image * ci,
+static int cuda_image_setup(struct cuda_image * ci, size_t stsize,
   unsigned char * imgbuf, size_t bufsize, size_t rowsize,
   unsigned int width, unsigned int height, int cspace)
 {
   size_t offset;
   unsigned char * cptr;
   unsigned int i, rsize;
+  struct cuda_image * cih;
 
-  cptr = (unsigned char *) ci;
-  offset = sizeof(*ci);
+  cih = (struct cuda_image *) calloc(0x1, stsize);
+  if (cih == nullptr) {
+    fprintf(stderr, "Error, failed to allocate memory for cuda_image: %zu\n", stsize);
+    fflush(stderr);
+    return -1;
+  }
+
+  cptr = (unsigned char *) cih;
+  offset = sizeof(*cih);
   if (offset & 0x7)
     offset = (offset & ~0x7) + 8;
 
-  ci->cu_rows = (unsigned char **) (cptr + offset);
-  ci->cu_buffer = imgbuf;
-  ci->cu_width = width;
-  ci->cu_height = height;
-  ci->cu_rowsize = (unsigned int) rowsize;
-  ci->cu_bufsize = (unsigned int) bufsize;
-  ci->cu_color = cspace;
+  cih->cu_rows = (unsigned char **) (cptr + offset);
+  cih->cu_buffer = imgbuf;
+  cih->cu_width = width;
+  cih->cu_height = height;
+  cih->cu_rowsize = (unsigned int) rowsize;
+  cih->cu_bufsize = (unsigned int) bufsize;
+  cih->cu_color = cspace;
 
   rsize = (unsigned int) rowsize;
   for (i = 0; i < height; ++i)
-    ci->cu_rows[i] = &imgbuf[i * rsize];
-  ci->cu_rows[height] = nullptr;
+    cih->cu_rows[i] = &imgbuf[i * rsize];
+  cih->cu_rows[height] = nullptr;
+
+  /* important: update again, the image rows-pointer: */
+  cptr = (unsigned char *) ci;
+  cih->cu_rows = (unsigned char **) (cptr + offset);
+
+  cudaMemcpy(ci, cih, stsize, cudaMemcpyHostToDevice);
+  memset(cih, 0, sizeof(*cih));
+  free(cih);
+  return 0;
 }
 
 struct cuda_image * cuda_image_new(unsigned int width,
   unsigned int height, int cspace, unsigned char ** cu_bufptr)
 {
-  size_t tsize;
-  size_t rowlen, bufsize;
+  int ret;
   struct cuda_image * ci;
   unsigned char * imgbuf;
+  size_t tsize, rowlen, bufsize;
 
   ci = nullptr;
   imgbuf = nullptr;
@@ -89,22 +106,16 @@ struct cuda_image * cuda_image_new(unsigned int width,
   cudaMalloc(&ci, tsize);
 
   /* setup the `cuda_image structure */
-  cuda_image_setup<<<1, 1>>>(ci, imgbuf, bufsize, rowlen, width, height, cspace);
-  cudaDeviceSynchronize();
+  ret = cuda_image_setup(ci, tsize, imgbuf, bufsize,
+    rowlen, width, height, cspace);
+  if (ret < 0) {
+    cudaFree(ci);
+    cudaFree(imgbuf);
+    return nullptr;
+  }
   if (cu_bufptr != nullptr)
     *cu_bufptr = imgbuf;
   return ci;
-}
-
-__global__ void cuda_image_free1(struct cuda_image * ci)
-{
-  ci->cu_rows = nullptr;
-  ci->cu_buffer = nullptr;
-  ci->cu_width = 0;
-  ci->cu_height = 0;
-  ci->cu_rowsize = 0;
-  ci->cu_bufsize = 0;
-  ci->cu_color = 0;
 }
 
 void cuda_image_free(struct cuda_image * ci)
@@ -119,8 +130,8 @@ void cuda_image_free(struct cuda_image * ci)
   cudaMemcpy(&cm, ci, sizeof(cm), cudaMemcpyDeviceToHost);
   imptr = cm.cu_buffer;
 
-  cuda_image_free1<<<1, 1>>>(ci);
-  cudaDeviceSynchronize();
+  memset(&cm, 0, sizeof(cm));
+  cudaMemcpy(ci, &cm, sizeof(cm), cudaMemcpyHostToDevice);
   cudaFree(ci);
   if (imptr != nullptr)
     cudaFree(imptr);

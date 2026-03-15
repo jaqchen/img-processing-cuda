@@ -9,8 +9,10 @@ COMPILER_OPTS  := -forward-unknown-to-host-compiler -Wno-deprecated-gpu-targets 
 	--extended-lambda -Xcompiler=-fPIC
 ifneq ("$(wildcard /usr/local/cuda-12.8)","")
 COMCAP_OPTS    := "--generate-code=arch=compute_86,code=[compute_86,sm_86]" --threads 0
+CFLAGS         += -I/usr/local/cuda-12.8/include
 else
 COMCAP_OPTS    := "--generate-code=arch=compute_62,code=[compute_62,sm_62]"
+CFLAGS         += -I/usr/local/cuda-10.2/include
 endif
 
 .PHONY: all clean
@@ -27,6 +29,9 @@ img2gray: img2gray.o cjpeg.o djpeg.o cuda_image.o
 
 %.o: %.cu cuda_image.cuh turbo_jpeg.h
 	nvcc -ccbin g++ -I. $(COMPILER_OPTS) -m64 --use_fast_math $(COMCAP_OPTS) -o $@ -c $<
+
+%.o: %.cpp cuda_image.cuh turbo_jpeg.h
+	g++ -I. $(CFLAGS) -O2 -fPIC -o $@ -c $<
 
 %.o: %.c turbo_jpeg.h
 	gcc -I. $(CFLAGS) -O2 -fPIC -o $@ -c $<
