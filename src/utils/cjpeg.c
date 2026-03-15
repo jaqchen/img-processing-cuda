@@ -187,7 +187,7 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
    * but we need to provide some value for jpeg_set_defaults() to work.
    */
   cinfo.data_precision = 8;
-  cinfo.in_color_space = color;
+  cinfo.in_color_space = (J_COLOR_SPACE) color;
   cinfo.image_width = tj->tj_width;
   cinfo.image_height = tj->tj_height;
   jpeg_set_defaults(&cinfo);
@@ -199,15 +199,22 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
    */
   cinfo.dct_method = JDCT_ISLOW;
   cinfo.input_components = (tj->tj_color == TURBO_JPEG_GRAY) ? 1 : 3;
-  jpeg_set_colorspace(&cinfo, color);
   jpeg_set_quality(&cinfo, quality, 0);
 
   jerr.emit_message = my_emit_message;
+  /* update image size, again, in case of any changes */
+  if (cinfo.image_width != tj->tj_width)
+    cinfo.image_width = tj->tj_width;
+  if (cinfo.image_height != tj->tj_height)
+    cinfo.image_height = tj->tj_height;
+  /* update colorspace if changed */
+  if (cinfo.in_color_space != (J_COLOR_SPACE) color)
+    cinfo.in_color_space = (J_COLOR_SPACE) color;
   /* Now that we know input colorspace, fix colorspace-dependent defaults */
   jpeg_default_colorspace(&cinfo);
   if (progressive != 0)
     jpeg_simple_progression(&cinfo);
-  cinfo.err->trace_level = 0;
+  cinfo.err->trace_level = 1;
 
   jpeg_stdio_dest(&cinfo, output_file);
 #ifdef ENTROPY_OPT_SUPPORTED
@@ -218,12 +225,12 @@ int turbo_jpeg_save(struct turbo_jpeg * tj,
 
   /* Process data */
   while (cinfo.next_scanline < cinfo.image_height) {
-    JSAMPROW rowp[8];
+    JSAMPROW rowp[DCTSIZE];
     unsigned int i, j, k;
 
     j = 0;
     k = cinfo.next_scanline;
-    for (i = 0; i < 8; ++i) {
+    for (i = 0; i < DCTSIZE; ++i) {
       rowp[j++] = tj->tj_rows[k + i];
       if ((k + j) >= cinfo.image_height)
         break;

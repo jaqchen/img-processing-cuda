@@ -206,7 +206,7 @@ err0:
     goto err0;
   }
 
-  cinfo.out_color_space = color;
+  cinfo.out_color_space = (J_COLOR_SPACE) color;
   jerr.emit_message = my_emit_message;
 
   if (cinfo.data_precision != 8) {
@@ -242,12 +242,12 @@ err0:
 
   /* Process data */
   while (cinfo.output_scanline < cinfo.output_height) {
-    JSAMPROW rowp[8];
+    JSAMPROW rowp[DCTSIZE];
     unsigned int i, j, k;
 
     j = 0;
     k = cinfo.output_scanline;
-    for (i = 0; i < 8; ++i) {
+    for (i = 0; i < DCTSIZE; ++i) {
       rowp[j++] = tj->tj_rows[k + i];
       if ((k + j) >= cinfo.image_height)
         break;
