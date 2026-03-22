@@ -11,45 +11,68 @@
 #include <cstdlib>
 #include "cuda_image.cuh"
 
-__global__ void cuda_image_normalize(unsigned char * * rowsptr,
-  unsigned char * rawpix, unsigned int rowlen, unsigned int totlen, int offset)
+__global__ void cuda_image_normalize(float * rowsptr,
+  unsigned char * rawpix, unsigned int totlen, int offset)
 {
   union {
     signed int ival;
     unsigned int uval;
-  } val;
+  } v;
   unsigned int pid, id, stride;
 
   stride = (unsigned int) (blockDim.x * gridDim.x);
   pid = (unsigned int) (blockIdx.x * blockDim.x + threadIdx.x);
   for (id = pid; id < totlen; id += stride) {
     float * rowptr;
-    unsigned int w, h;
     unsigned char * pix;
 
-    h = id / rowlen;
-    w = id % rowlen;
     pix = rawpix + id;
-    val.uval = (unsigned int) pix[0];
-    val.ival = val.ival + offset;
-    rowptr = (float *) rowsptr[h];
-    rowptr[w] = (float) val.ival / 255.0f;
+    v.uval = (unsigned int) pix[0];
+    v.ival = v.ival - offset;
+    rowptr = rowsptr + id;
+    rowptr[0] = (float) v.ival / 255.0f;
+  }
+}
+
+__global__ void cuda_image_denorm(unsigned char * rowsptr,
+  float * rawpix, unsigned int totlen, int offset)
+{
+  unsigned int pid, id, stride;
+
+  stride = (unsigned int) (blockDim.x * gridDim.x);
+  pid = (unsigned int) (blockIdx.x * blockDim.x + threadIdx.x);
+  for (id = pid; id < totlen; id += stride) {
+    signed int v;
+    float * pix, fval;
+    unsigned char * rowptr;
+
+    pix = rawpix + id;
+    fval = pix[0] * 255.0f + 0.5f;
+    v = offset + (signed int) fval;
+
+    rowptr = rowsptr + id;
+    if (v >= 256)
+      *rowptr = 255;
+    else if (v < 0)
+      *rowptr = 0;
+    else
+      *rowptr = (unsigned char) v;
   }
 }
 
 struct cuda_image * turbo_image_to_cuda(const struct turbo_jpeg * tj, int normalize)
 {
   struct cuda_image * ci;
-  unsigned char * * prows;
   unsigned char * imgptr, * imptr;
 
   ci = nullptr;
   imgptr = nullptr;
-  if (tj == nullptr || tj->tj_rows == nullptr)
+  if (tj == nullptr || tj->tj_buffer == nullptr || tj->tj_bufsize == 0)
     return ci;
 
-  if (tj->tj_rowsize * tj->height != jt->bufsize) {
+  if (tj->tj_rowsize * tj->tj_height != tj->tj_bufsize) {
     fprintf(stderr, "Error, the image should not be padded, rowsize: %u, height: %u, bufsize: %u\n",
+      tj->tj_rowsize, tj->tj_height, tj->tj_bufsize);
     fflush(stderr);
     return ci;
   }
@@ -64,15 +87,14 @@ struct cuda_image * turbo_image_to_cuda(const struct turbo_jpeg * tj, int normal
   }
 
   imptr = nullptr;
-  prows = jpeg_image_rowsptr(ci, sizeof(*ci));
   cudaMalloc(&imptr, tj->tj_bufsize);
   cudaMemcpy(imptr, tj->tj_buffer, (size_t) tj->tj_bufsize, cudaMemcpyHostToDevice);
 
-  const unsigned int num_blocks = 12;
+  const unsigned int num_blocks = 256;
   const unsigned int num_threads = 256;
-  cuda_image_normalize<<<num_blocks, num_threads>>>(prows, imptr,
-    tj->tj_rowsize, tj->tj_bufsize, (normalize != 1) ? normalize : 0);
-  cudaDeviceSynchronoize();
+  cuda_image_normalize<<<num_blocks, num_threads>>>((float *) imgptr, imptr,
+    tj->tj_bufsize, (normalize != 1) ? normalize : 0);
+  cudaDeviceSynchronize();
   cudaFree(imptr);
   return ci;
 }
@@ -98,7 +120,7 @@ static int cuda_image_setup(struct cuda_image * ci, size_t stsize,
   cih->cu_height = height;
   cih->cu_rowsize = (unsigned int) rowsize;
   cih->cu_bufsize = (unsigned int) bufsize;
-  cih->cu_normalized = normalize;
+  cih->cu_normal = normalize;
   cih->cu_color = cspace;
 
   rsize = (unsigned int) rowsize;
@@ -115,7 +137,7 @@ static int cuda_image_setup(struct cuda_image * ci, size_t stsize,
 }
 
 struct cuda_image * cuda_image_new(unsigned int width,
-  unsigned int height, int normalize, int colorspace, unsigned char ** cu_bufptr)
+  unsigned int height, int normalize, int cspace, unsigned char ** cu_bufptr)
 {
   int ret;
   struct cuda_image * ci;
@@ -184,9 +206,9 @@ struct turbo_jpeg * turbo_image_from_cuda(struct cuda_image * ci)
 {
   int color;
   struct cuda_image cm;
-  unsigned char * imgptr;
   struct turbo_jpeg * tj;
   unsigned int w, h, bufsize;
+  unsigned char * imgptr, * imptr;
 
   if (ci == nullptr)
     return nullptr;
@@ -195,6 +217,7 @@ struct turbo_jpeg * turbo_image_from_cuda(struct cuda_image * ci)
   cm.cu_width = 0;
   cm.cu_height = 0;
   cm.cu_bufsize = 0;
+  cm.cu_normal = 0;
   cm.cu_color = -1;
   cudaMemcpy(&cm, ci, sizeof(cm), cudaMemcpyDeviceToHost);
   color = cm.cu_color;
@@ -222,6 +245,19 @@ struct turbo_jpeg * turbo_image_from_cuda(struct cuda_image * ci)
   if (tj == nullptr)
     return nullptr;
 
-  cudaMemcpy(tj->tj_buffer, imgptr, bufsize, cudaMemcpyDeviceToHost);
+  if (cm.cu_normal == 0) {
+    cudaMemcpy(tj->tj_buffer, imgptr, bufsize, cudaMemcpyDeviceToHost);
+    return tj;
+  }
+
+  imptr = nullptr;
+  cudaMalloc(&imptr, bufsize);
+  const unsigned int num_blocks = 256;
+  const unsigned int num_threads = 256;
+  cuda_image_denorm<<<num_blocks, num_threads>>>(imptr, (float *) imgptr,
+    tj->tj_bufsize, (cm.cu_normal != 1) ? cm.cu_normal : 0);
+  cudaDeviceSynchronize();
+  cudaMemcpy(tj->tj_buffer, imptr, tj->tj_bufsize, cudaMemcpyDeviceToHost);
+  cudaFree(imptr);
   return tj;
 }

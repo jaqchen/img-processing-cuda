@@ -3,7 +3,7 @@ MAKEFLAGS   += -r -R
 CC          := gcc
 CFLAGS      := -I. -Wall -fPIC -O2 -ggdb -fno-omit-frame-pointer
 LDFLAGS     := -ljpeg
-TARGETS     := test-jpeg test-encode img2gray
+TARGETS     := test-jpeg test-encode img2gray test-normalize
 
 COMPILER_OPTS  := -forward-unknown-to-host-compiler -Wno-deprecated-gpu-targets \
 	--extended-lambda -Xcompiler=-fPIC
@@ -25,6 +25,9 @@ test-jpeg: test-jpeg.o cjpeg.o djpeg.o
 	$(CC) -o $@ $(CFLAGS) $^ $(LDFLAGS)
 
 img2gray: img2gray.o cjpeg.o djpeg.o cuda_image.o
+	nvcc -ccbin g++ -I. $(COMPILER_OPTS) -m64 $(COMCAP_OPTS) -o $@ $^ $(LDFLAGS)
+
+test-normalize: test-normalize.o cjpeg.o djpeg.o cuda_image.o
 	nvcc -ccbin g++ -I. $(COMPILER_OPTS) -m64 $(COMCAP_OPTS) -o $@ $^ $(LDFLAGS)
 
 %.o: %.cu cuda_image.cuh turbo_jpeg.h

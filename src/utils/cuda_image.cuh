@@ -25,7 +25,7 @@ struct cuda_image {
   unsigned int cu_height;
   unsigned int cu_rowsize;
   unsigned int cu_bufsize;
-  unsigned int cu_normalized; /* zero: the image is not normalized into range [0.0 ~ 1.0] */
+  unsigned int cu_normal; /* zero: the image is not normalized into range [0.0 ~ 1.0] */
   int cu_color;
 };
 

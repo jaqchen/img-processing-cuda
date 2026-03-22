@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
     if (jpeg == NULL)
       continue;
 
-    cuimg = turbo_image_to_cuda(jpeg);
+    cuimg = turbo_image_to_cuda(jpeg, 0);
     if (cuimg == nullptr) {
       fprintf(stderr, "Error, failed to copy image to cuda device: %d\n", i);
       fflush(stderr);
@@ -101,4 +101,5 @@ int main(int argc, char *argv[])
     turbo_jpeg_save(jpeg, name, 98, 1);
     turbo_jpeg_free(jpeg);
   }
+  return 0;
 }

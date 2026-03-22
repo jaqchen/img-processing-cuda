@@ -126,7 +126,7 @@ static void my_emit_message(j_common_ptr cinfo, int msg_level)
 }
 
 int turbo_jpeg_save(struct turbo_jpeg * tj,
-	const char * filename, int quality, int progressive)
+  const char * filename, int quality, int progressive)
 {
   int color;
   struct jpeg_compress_struct cinfo;
