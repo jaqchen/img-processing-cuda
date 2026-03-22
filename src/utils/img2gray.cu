@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
     jpeg = nullptr;
 
     /* perform the translation of COLOR -> GRAY image */
-    gray = cuda_image_new(w, h, TURBO_JPEG_GRAY, nullptr);
+    gray = cuda_image_new(w, h, 0, TURBO_JPEG_GRAY, nullptr);
     if (gray == nullptr) {
       fprintf(stderr, "Error, failed to create gray CUDA image: %ux%u\n", w, h);
       fflush(stderr);

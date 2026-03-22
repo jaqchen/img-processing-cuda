@@ -11,32 +11,79 @@
 #include <cstdlib>
 #include "cuda_image.cuh"
 
-struct cuda_image * turbo_image_to_cuda(const struct turbo_jpeg * tj)
+__global__ void cuda_image_normalize(unsigned char * * rowsptr,
+  unsigned char * rawpix, unsigned int rowlen, unsigned int totlen, int offset)
+{
+  union {
+    signed int ival;
+    unsigned int uval;
+  } val;
+  unsigned int pid, id, stride;
+
+  stride = (unsigned int) (blockDim.x * gridDim.x);
+  pid = (unsigned int) (blockIdx.x * blockDim.x + threadIdx.x);
+  for (id = pid; id < totlen; id += stride) {
+    float * rowptr;
+    unsigned int w, h;
+    unsigned char * pix;
+
+    h = id / rowlen;
+    w = id % rowlen;
+    pix = rawpix + id;
+    val.uval = (unsigned int) pix[0];
+    val.ival = val.ival + offset;
+    rowptr = (float *) rowsptr[h];
+    rowptr[w] = (float) val.ival / 255.0f;
+  }
+}
+
+struct cuda_image * turbo_image_to_cuda(const struct turbo_jpeg * tj, int normalize)
 {
   struct cuda_image * ci;
-  unsigned char * imgptr;
+  unsigned char * * prows;
+  unsigned char * imgptr, * imptr;
 
   ci = nullptr;
   imgptr = nullptr;
   if (tj == nullptr || tj->tj_rows == nullptr)
     return ci;
 
-  ci = cuda_image_new(tj->tj_width, tj->tj_height, tj->tj_color, &imgptr);
+  if (tj->tj_rowsize * tj->height != jt->bufsize) {
+    fprintf(stderr, "Error, the image should not be padded, rowsize: %u, height: %u, bufsize: %u\n",
+    fflush(stderr);
+    return ci;
+  }
+
+  ci = cuda_image_new(tj->tj_width, tj->tj_height, normalize, tj->tj_color, &imgptr);
   if (ci == nullptr)
     return ci;
 
-  cudaMemcpy(imgptr, tj->tj_buffer, (size_t) tj->tj_bufsize, cudaMemcpyHostToDevice);
+  if (normalize == 0) {
+    cudaMemcpy(imgptr, tj->tj_buffer, (size_t) tj->tj_bufsize, cudaMemcpyHostToDevice);
+    return ci;
+  }
+
+  imptr = nullptr;
+  prows = jpeg_image_rowsptr(ci, sizeof(*ci));
+  cudaMalloc(&imptr, tj->tj_bufsize);
+  cudaMemcpy(imptr, tj->tj_buffer, (size_t) tj->tj_bufsize, cudaMemcpyHostToDevice);
+
+  const unsigned int num_blocks = 12;
+  const unsigned int num_threads = 256;
+  cuda_image_normalize<<<num_blocks, num_threads>>>(prows, imptr,
+    tj->tj_rowsize, tj->tj_bufsize, (normalize != 1) ? normalize : 0);
+  cudaDeviceSynchronoize();
+  cudaFree(imptr);
   return ci;
 }
 
 static int cuda_image_setup(struct cuda_image * ci, size_t stsize,
   unsigned char * imgbuf, size_t bufsize, size_t rowsize,
-  unsigned int width, unsigned int height, int cspace)
+  unsigned int width, unsigned int height, int normalize, int cspace)
 {
-  size_t offset;
-  unsigned char * cptr;
   unsigned int i, rsize;
   struct cuda_image * cih;
+  unsigned char * * prows;
 
   cih = (struct cuda_image *) calloc(0x1, stsize);
   if (cih == nullptr) {
@@ -45,27 +92,21 @@ static int cuda_image_setup(struct cuda_image * ci, size_t stsize,
     return -1;
   }
 
-  cptr = (unsigned char *) cih;
-  offset = sizeof(*cih);
-  if (offset & 0x7)
-    offset = (offset & ~0x7) + 8;
-
-  cih->cu_rows = (unsigned char **) (cptr + offset);
+  cih->cu_rows = jpeg_image_rowsptr(ci, sizeof(*cih));
   cih->cu_buffer = imgbuf;
   cih->cu_width = width;
   cih->cu_height = height;
   cih->cu_rowsize = (unsigned int) rowsize;
   cih->cu_bufsize = (unsigned int) bufsize;
+  cih->cu_normalized = normalize;
   cih->cu_color = cspace;
 
   rsize = (unsigned int) rowsize;
+  prows = jpeg_image_rowsptr(cih, sizeof(*cih));
+  /* important: update again, the image rows-pointer array */
   for (i = 0; i < height; ++i)
-    cih->cu_rows[i] = &imgbuf[i * rsize];
-  cih->cu_rows[height] = nullptr;
-
-  /* important: update again, the image rows-pointer: */
-  cptr = (unsigned char *) ci;
-  cih->cu_rows = (unsigned char **) (cptr + offset);
+    prows[i] = &imgbuf[i * rsize];
+  prows[height] = nullptr;
 
   cudaMemcpy(ci, cih, stsize, cudaMemcpyHostToDevice);
   memset(cih, 0, sizeof(*cih));
@@ -74,7 +115,7 @@ static int cuda_image_setup(struct cuda_image * ci, size_t stsize,
 }
 
 struct cuda_image * cuda_image_new(unsigned int width,
-  unsigned int height, int cspace, unsigned char ** cu_bufptr)
+  unsigned int height, int normalize, int colorspace, unsigned char ** cu_bufptr)
 {
   int ret;
   struct cuda_image * ci;
@@ -96,6 +137,8 @@ struct cuda_image * cuda_image_new(unsigned int width,
   /* allocate CUDA memory for image pixels */
   bufsize = (cspace == TURBO_JPEG_GRAY) ? 1 : 3;
   bufsize *= (size_t) width;
+  if (normalize != 0)
+    bufsize *= sizeof(float);
   rowlen = bufsize;
   bufsize *= (size_t) height;
   cudaMalloc(&imgbuf, bufsize);
@@ -107,7 +150,7 @@ struct cuda_image * cuda_image_new(unsigned int width,
 
   /* setup the `cuda_image structure */
   ret = cuda_image_setup(ci, tsize, imgbuf, bufsize,
-    rowlen, width, height, cspace);
+    rowlen, width, height, normalize, cspace);
   if (ret < 0) {
     cudaFree(ci);
     cudaFree(imgbuf);

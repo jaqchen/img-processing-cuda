@@ -52,6 +52,16 @@ struct turbo_jpeg {
 	int tj_color; /* one of `TURBO_JPEG_GRAY/TURBO_JPEG_RGB/TURBO_JPEG_YUV` */
 };
 
+static inline unsigned char * * jpeg_image_rowsptr(void * stbase, unsigned int stsize)
+{
+	unsigned long base;
+	base = (unsigned long) stbase;
+	base += (unsigned long) stsize;
+	if (base & 0x7ul)
+		base = (base & ~0x7ul) + 0x8;
+	return (unsigned char **) base;
+}
+
 struct turbo_jpeg * turbo_jpeg_new(unsigned int width, unsigned int height, int colorspace);
 
 void turbo_jpeg_free(struct turbo_jpeg * tj);

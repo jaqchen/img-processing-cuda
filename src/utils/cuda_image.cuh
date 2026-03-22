@@ -25,13 +25,14 @@ struct cuda_image {
   unsigned int cu_height;
   unsigned int cu_rowsize;
   unsigned int cu_bufsize;
+  unsigned int cu_normalized; /* zero: the image is not normalized into range [0.0 ~ 1.0] */
   int cu_color;
 };
 
-struct cuda_image * turbo_image_to_cuda(const struct turbo_jpeg * tj);
+struct cuda_image * turbo_image_to_cuda(const struct turbo_jpeg * tj, int normalize);
 
-struct cuda_image * cuda_image_new(unsigned int width,
-  unsigned int height, int colorspace, unsigned char ** cu_bufptr);
+struct cuda_image * cuda_image_new(unsigned int width, unsigned int height,
+  int normalize, int colorspace, unsigned char ** cu_bufptr);
 
 void cuda_image_free(struct cuda_image * ci);
 

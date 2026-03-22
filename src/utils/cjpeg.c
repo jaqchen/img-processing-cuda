@@ -84,12 +84,9 @@ struct turbo_jpeg * turbo_jpeg_new(unsigned int width, unsigned int height, int 
     free(imgbuf);
     return NULL;
   }
-  jpeg = (struct turbo_jpeg *) jptr;
 
-  tsize = sizeof(*jpeg);
-  if (tsize & 0x7)
-    tsize = (tsize & ~0x7) + 8;
-  jpeg->tj_rows    = (unsigned char **) (jptr + tsize);
+  jpeg = (struct turbo_jpeg *) jptr;
+  jpeg->tj_rows    = jpeg_image_rowsptr(jptr, sizeof(*jpeg));
   jpeg->tj_buffer  = imgbuf;
   jpeg->tj_width   = width;
   jpeg->tj_height  = height;
